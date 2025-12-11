@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Golden Age Manager - V8 (Mobile Ready)</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+  <style>
+    /* --- THEME DEFINITIONS --- */
+    :root {
+      --bg: #050408;
+      --panel: #0e0b14;
+      --border: #3d3052;
+      --primary: #8a2be2;
+      --accent: #05d9e8;
+      --danger: #ff2a6d;
+      --text: #e0e0e0;
+    }
+    
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; height: 100vh; background: var(--bg); color: var(--text); font-family: 'VT323', monospace; overflow: hidden; }
+    #app { display: flex; height: 100%; width: 100%; position: relative; }
+
+    /* SIDEBAR (PC DEFAULT) */
+    .sidebar { width: 500px; flex-shrink: 0; background: var(--panel); border-right: 4px solid var(--border); display: flex; flex-direction: column; z-index: 20; box-shadow: 10px 0 50px #000; }
+    .header { padding: 15px; background: #000; border-bottom: 2px solid var(--primary); text-align: center; }
+    .toolbar { padding: 8px; background: #111; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
+    
+    .btn { flex: 1; border: 1px solid #444; background: #222; color: #ccc; font-family: 'Press Start 2P'; font-size: 9px; padding: 10px 5px; cursor: pointer; text-transform: uppercase; transition: 0.1s; }
+    .btn:hover { background: #333; color: #fff; border-color: #fff; }
+    .btn-save { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { border-color: var(--danger); color: var(--danger); }
+
+    /* EDIT AREA */
+    .scroll-area { flex: 1; overflow-y: auto; padding: 20px; padding-bottom: 80px; }
+    .field-card { margin-bottom: 25px; border-left: 2px solid #333; padding-left: 12px; transition: 0.2s; }
+    .field-card.active { border-left-color: var(--accent); }
+    
+    .field-label { color: var(--primary); font-size: 1.1em; text-transform: uppercase; margin-bottom: 5px; display: block; }
+    .field-tag { font-size: 0.7em; background: #000; padding: 2px 6px; color: #777; border: 1px solid #333; margin-left: 10px; }
+
+    /* INPUTS */
+    .inp { width: 100%; background: #08060a; border: 1px solid var(--border); color: var(--accent); font-family: 'VT323', monospace; font-size: 1.25em; padding: 10px; }
+    .inp:focus { outline: none; border-color: var(--primary); background: #110e1a; }
+    textarea.inp { min-height: 120px; font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.5; color: #ddd; white-space: pre-wrap; }
+
+    .bb-toolbar { display: flex; gap: 2px; margin-bottom: 2px; }
+    .bb-btn { width: 30px; height: 30px; background: #222; border: 1px solid #333; color: #888; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .bb-btn:hover { background: var(--accent); color: #000; }
+
+    /* PREVIEW */
+    .main { flex: 1; background: #000; display: flex; align-items: center; justify-content: center; position: relative; }
+    .bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
+    .iframe-wrapper { width: 100%; height: 100%; max-width: 950px; background: #fff; border: 4px solid var(--border); box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+    iframe { width: 100%; height: 100%; border: none; display: block; }
+
+    /* MODAL */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; align-items: center; justify-content: center; }
+    .modal { width: 500px; max-width: 90%; background: var(--panel); border: 2px solid var(--accent); padding: 30px; text-align: center; }
+    .toast { position: fixed; bottom: 80px; right: 20px; background: var(--primary); color: #fff; padding: 10px 20px; font-size: 12px; pointer-events: none; opacity: 0; transition: 0.3s; z-index: 200; border-radius: 4px; }
+    .toast.show { opacity: 1; }
+
+    /* --- MOBILE RESPONSIVE LOGIC --- */
+    .mobile-nav { display: none; } /* Oculto no PC */
+
+    @media (max-width: 900px) {
+      /* Stack layout logic via classes instead of flex-direction to keep full height control */
+      .sidebar { width: 100%; height: calc(100% - 60px); position: absolute; top:0; left:0; border-right: none; transition: transform 0.3s ease; }
+      .main { width: 100%; height: calc(100% - 60px); position: absolute; top:0; left:0; }
+      .iframe-wrapper { border: none; }
+      
+      /* Visibilidade controlada por classes */
+      .view-editor .sidebar { transform: translateX(0); z-index: 50; }
+      .view-editor .main { transform: translateX(100%); z-index: 10; }
+      
+      .view-preview .sidebar { transform: translateX(-100%); z-index: 10; }
+      .view-preview .main { transform: translateX(0); z-index: 50; }
+
+      /* Navegação Mobile Inferior */
+      .mobile-nav {
+        display: flex; position: absolute; bottom: 0; left: 0; width: 100%; height: 60px;
+        background: #000; border-top: 2px solid var(--primary); z-index: 100;
+      }
+      .nav-tab {
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: #111; color: #666; font-family: 'Press Start 2P'; font-size: 10px; cursor: pointer;
+        border: none; border-right: 1px solid #222;
+      }
+      .nav-tab.active { background: var(--panel); color: var(--accent); border-top: 4px solid var(--accent); }
+      .nav-tab i { font-size: 20px; margin-bottom: 5px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app" :class="mobileViewClass">
+  <div class="toast" :class="{show: showToast}">SALVO AUTO</div>
+
+  <div class="modal-backdrop" v-if="showImport">
+    <div class="modal">
+      <h2 style="font-family:'Press Start 2P'; color:var(--accent); margin-bottom:15px;">IMPORT SYSTEM</h2>
+      <textarea v-model="importHtml" class="inp" style="height:150px; font-size:11px; font-family:monospace; margin-bottom:20px; color:#fff;" placeholder="Cole o HTML aqui..."></textarea>
+      <button class="btn btn-save" style="width:100%; padding:15px;" @click="loadSystem(true)">CARREGAR</button>
+    </div>
+  </div>
+
+  <div class="mobile-nav">
+    <button class="nav-tab" :class="{active: activeTab === 'editor'}" @click="activeTab = 'editor'">
+      <span class="material-icons-round">edit</span>
+      EDITOR
+    </button>
+    <button class="nav-tab" :class="{active: activeTab === 'preview'}" @click="activeTab = 'preview'">
+      <span class="material-icons-round">visibility</span>
+      PREVIEW
+    </button>
+  </div>
+
+  <div class="sidebar">
+    <div class="header">
+      <h1 style="font-family:'Press Start 2P'; font-size:12px; color:var(--accent);">GOLDEN AGE</h1>
+      <p style="font-size:10px; color:#666; margin-top:5px;">Template Manager ("Agora Vai" Edition)</p>
+    </div>
+    <div class="toolbar">
+      <button class="btn" @click="resetAll">NOVO</button>
+      <button class="btn btn-danger" @click="clearCache">LIMPAR</button>
+      <button class="btn btn-save" @click="exportCode">COPIAR</button>
+    </div>
+
+    <div class="scroll-area">
+      <div v-for="(field, i) in fields" :key="field.id" class="field-card" :class="{active: activeFieldId === field.id}" :id="'card-'+field.id">
+        <label class="field-label">
+          {{ field.label }} <span class="field-tag">{{ field.type }}</span>
+        </label>
+
+        <div v-if="['CONTENT','EXTRA'].includes(field.type)" class="bb-toolbar">
+          <button class="bb-btn" @click="addTag(i, '[b]', '[/b]')"><b>B</b></button>
+          <button class="bb-btn" @click="addTag(i, '[i]', '[/i]')"><i>I</i></button>
+          <button class="bb-btn" @click="addTag(i, '[u]', '[/u]')"><u>U</u></button>
+          <button class="bb-btn" @click="addTag(i, '[spoiler]', '[/spoiler]')"><span class="material-icons-round" style="font-size:14px">visibility_off</span></button>
+          <button class="bb-btn" @click="addTag(i, '[color=#ff0000]', '[/color]')"><span class="material-icons-round" style="font-size:14px">palette</span></button>
+        </div>
+
+        <div v-if="field.type === 'IMAGE'" style="display:flex; gap:10px;">
+          <img :src="field.value" style="width:45px; height:45px; object-fit:cover; border:1px solid #fff;">
+          <input class="inp" v-model="field.value" @input="updatePreview(field)">
+        </div>
+        <input v-else-if="['TITLE','STATUS'].includes(field.type)" class="inp" v-model="field.value" @input="updatePreview(field)">
+        <textarea v-else :id="'area-'+i" class="inp" v-model="field.value" @input="updatePreview(field)"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="bg-grid"></div>
+    <div class="iframe-wrapper"><iframe ref="iframe"></iframe></div>
+  </div>
+</div>
+
+<script>
+  const { createApp, ref, computed, watch, onMounted } = Vue;
+
+  createApp({
+    setup() {
+      // STATE
+      const showImport = ref(true);
+      const importHtml = ref('');
+      const fields = ref([]);
+      const activeFieldId = ref(null);
+      const iframe = ref(null);
+      const showToast = ref(false);
+      const activeTab = ref('editor'); // Controle Mobile ('editor' ou 'preview')
+      let doc = null;
+      const CACHE_KEY = 'golden_age_v8_mobile';
+
+      // Computed Class para controlar visualização mobile
+      const mobileViewClass = computed(() => {
+        return activeTab.value === 'editor' ? 'view-editor' : 'view-preview';
+      });
+
+      // --- PERSISTENCE ---
+      onMounted(() => {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const data = JSON.parse(cached);
+            if (data.html) {
+              importHtml.value = data.html;
+              loadSystem(false, data.fields);
+            }
+          } catch(e) {}
+        }
+      });
+
+      watch([fields, importHtml], () => {
+        if (!showImport.value && fields.value.length > 0) {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ html: importHtml.value, fields: fields.value }));
+          showToast.value = true;
+          setTimeout(() => showToast.value = false, 2000);
+        }
+      }, { deep: true });
+
+      // --- LOGIC ---
+      const loadSystem = (isNewScan, cachedFields = null) => {
+        if (!importHtml.value) return;
+        const frame = iframe.value;
+        doc = frame.contentDocument || frame.contentWindow.document;
+
+        const parser = new DOMParser();
+        const parsedDoc = parser.parseFromString(importHtml.value, 'text/html');
+        const headContent = Array.from(parsedDoc.querySelectorAll('link, style')).map(el => el.outerHTML).join('\n');
+        parsedDoc.querySelectorAll('link, style, script, meta, title').forEach(el => el.remove());
+        const bodyContent = parsedDoc.body.innerHTML;
+
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html><html><head>${headContent}
+          <style>
+            body { margin:0; overflow-y:auto; background-color:#fff; }
+            [data-edit-id]:hover { outline: 2px dashed #05d9e8; cursor: pointer; }
+            .active-edit { outline: 3px solid #ff2a6d !important; position: relative; z-index: 50; }
+            .spoiler-wrap { background:#000; border:1px dashed #444; margin:5px 0; padding:5px; }
+            .spoiler-head { color:#aaa; cursor:pointer; font-family:monospace; user-select:none; }
+            .spoiler-body { display:none; padding:10px; border-top:1px solid #333; color:#ccc; }
+            .spoiler-open .spoiler-body { display:block; }
+          </style></head><body><div id="root">${bodyContent}</div>
+          <script>
+            document.addEventListener('click', e => {
+              if(e.target.classList.contains('spoiler-head')) e.target.parentElement.classList.toggle('spoiler-open');
+            });
+          <\/script></body></html>`);
+        doc.close();
+
+        frame.onload = () => {
+          if (isNewScan) scanDOM();
+          else {
+            scanDOM(true);
+            if (cachedFields) {
+              fields.value.forEach((f, i) => {
+                if (cachedFields[i]) f.value = cachedFields[i].value;
+              });
+            }
+            fields.value.forEach(f => updatePreview(f));
+          }
+          setupClickSync();
+          showImport.value = false;
+        };
+      };
+
+      const scanDOM = () => {
+        const root = doc.getElementById('root');
+        const detected = [];
+        let count = 0;
+        const wrappers = ['DIV', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'UL', 'LI', 'BLOCKQUOTE'];
+
+        const traverse = (node) => {
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          if (['SCRIPT','STYLE','LINK','svg'].includes(node.tagName)) return;
+
+          if (node.children.length === 1 && node.firstElementChild.nodeType === Node.ELEMENT_NODE) {
+            const child = node.firstElementChild;
+            if (!(wrappers.includes(node.tagName) && !wrappers.includes(child.tagName))) {
+               traverse(child); return;
+            }
+          }
+
+          const hasBlockChildren = Array.from(node.children).some(c => wrappers.includes(c.tagName));
+          if (hasBlockChildren) { Array.from(node.children).forEach(traverse); return; }
+
+          const text = node.innerText.trim();
+          const html = node.innerHTML.trim();
+          let type = null; let label = "Texto";
+
+          if (node.tagName === 'IMG') { type = 'IMAGE'; label = 'Imagem'; }
+          else if (/^\d+[\s\/]+\d+$/.test(text)) {
+            type = 'STATUS'; const prev = node.previousElementSibling;
+            label = (prev && prev.innerText.length < 15) ? prev.innerText : 'Status';
+          }
+          else if (/^H[1-6]$/.test(node.tagName) || (node.className && node.className.includes('title'))) { type = 'TITLE'; label = 'Título'; }
+          else if (text.length > 40 || html.includes('<br>')) { type = 'CONTENT'; label = 'Conteúdo'; }
+          else if (text.includes('[spoiler') || (node.className && node.className.includes('extra'))) { type = 'EXTRA'; label = 'Extra / Spoiler'; }
+
+          if (type) {
+            const uid = `field_${count++}`; node.setAttribute('data-edit-id', uid);
+            let val = type === 'IMAGE' ? node.src : node.innerHTML.trim();
+            detected.push({ id: uid, type, label, value: val });
+          } else { Array.from(node.children).forEach(traverse); }
+        };
+        traverse(root); fields.value = detected;
+      };
+
+      const updatePreview = (field) => {
+        if (!doc) return;
+        const el = doc.querySelector(`[data-edit-id="${field.id}"]`);
+        if (!el) return;
+
+        if (field.type === 'IMAGE') el.src = field.value;
+        else {
+          if (['CONTENT','EXTRA'].includes(field.type)) el.innerHTML = previewParser(field.value);
+          else el.innerText = field.value;
+          
+          if(field.type === 'STATUS') {
+             const parts = field.value.split('/');
+             if(parts.length===2) {
+               const pct = (parseFloat(parts[0])/parseFloat(parts[1]))*100;
+               let p = el.parentElement;
+               for(let k=0; k<4; k++){ if(!p) break; const b = p.querySelector('[class*="fill"],[class*="bar-inner"]'); if(b){ b.style.width=pct+'%'; break;} p=p.parentElement; }
+             }
+          }
+        }
+      };
+
+      const exportParser = (text) => {
+        if (!text) return '';
+        return text
+          .replace(/\[b\](.*?)\[\/b\]/gis, '<b>$1</b>')
+          .replace(/\[i\](.*?)\[\/i\]/gis, '<i>$1</i>')
+          .replace(/\[u\](.*?)\[\/u\]/gis, '<u>$1</u>')
+          .replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>')
+          .replace(/\n/g, '<br>');
+      };
+
+      const previewParser = (text) => {
+        return exportParser(text).replace(/\[spoiler(?:="(.*?)")?\](.*?)\[\/spoiler\]/gis, 
+            '<div class="spoiler-wrap"><div class="spoiler-head">▼ $1</div><div class="spoiler-body">$2</div></div>');
+      };
+
+      const exportCode = () => {
+        if (!doc) return;
+        const exportRoot = doc.getElementById('root').cloneNode(true);
+        fields.value.forEach(f => {
+          const el = exportRoot.querySelector(`[data-edit-id="${f.id}"]`);
+          if (el) {
+            if (f.type === 'IMAGE') el.src = f.value;
+            else if (['CONTENT','EXTRA'].includes(f.type)) el.innerHTML = exportParser(f.value);
+            else el.innerText = f.value;
+            el.removeAttribute('data-edit-id'); el.classList.remove('active-edit');
+          }
+        });
+        exportRoot.querySelectorAll('[data-edit-id]').forEach(el => el.removeAttribute('data-edit-id'));
+        const links = Array.from(doc.head.querySelectorAll('link')).map(l => l.outerHTML).join('\n');
+        const final = links + '\n' + exportRoot.innerHTML;
+        navigator.clipboard.writeText(final).then(() => alert('CÓDIGO EXPORTADO COM SUCESSO!'));
+      };
+
+      const addTag = (i, o, c) => {
+        const area = document.getElementById('area-'+i);
+        if(!area) return;
+        const s = area.selectionStart, e = area.selectionEnd, v = area.value;
+        fields.value[i].value = v.substring(0,s)+o+v.substring(s,e)+c+v.substring(e);
+        updatePreview(fields.value[i]);
+      };
+
+      const setupClickSync = () => {
+        doc.addEventListener('click', e => {
+          let t = e.target;
+          while(t && t.tagName!=='BODY'){
+            const id = t.getAttribute('data-edit-id');
+            if(id){
+              activeFieldId.value = id;
+              // No mobile, se clicar no preview, volta pro editor automaticamente
+              if(window.innerWidth <= 900) activeTab.value = 'editor';
+              
+              doc.querySelectorAll('.active-edit').forEach(x=>x.classList.remove('active-edit'));
+              t.classList.add('active-edit');
+              setTimeout(() => {
+                 document.getElementById('card-'+id)?.scrollIntoView({behavior:'smooth',block:'center'});
+              }, 100);
+              return;
+            }
+            t = t.parentElement;
+          }
+        });
+      };
+      
+      const resetAll = () => { if(confirm('Novo?')) clearCache(); };
+      const clearCache = () => { localStorage.removeItem(CACHE_KEY); location.reload(); };
+
+      return { showImport, importHtml, fields, activeFieldId, iframe, showToast, activeTab, mobileViewClass, loadSystem, updatePreview, addTag, exportCode, resetAll, clearCache };
+    }
+  }).mount('#app');
+</script>
+</body>
+</html>
